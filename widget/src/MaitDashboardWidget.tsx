@@ -137,7 +137,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
   const installName = (i: ItemConfig) => deviceMap[i.device]?.app_installs?.find((a) => a?.name === i.appKey)?.display_name ?? undefined;
   const titles = (i: ItemConfig, fallbackSub?: string) => ({
     title: i.label ?? deviceName(i.device),
-    subtitle: i.label ? deviceName(i.device) : (fallbackSub ?? installName(i)),
+    subtitle: i.label && i.label !== deviceName(i.device) ? deviceName(i.device) : (fallbackSub ?? installName(i)),
   });
 
   const pumpViews = cfg.pumps.map((p) => pumpView(tagsOf(p), p.target));
@@ -187,7 +187,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
               <PumpCard
                 key={key}
                 title={title}
-                subtitle={p.label ? `${deviceName(p.device)} · ${name}` : subtitle}
+                subtitle={p.label && p.label !== deviceName(p.device) ? `${deviceName(p.device)} · ${name}` : subtitle}
                 view={view}
                 runTime={rt}
                 {...freshness(p)}
