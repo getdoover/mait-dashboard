@@ -7,8 +7,19 @@ import RemoteComponentWrapper from "customer_site/RemoteComponentWrapper";
 import { useRemoteParams } from "customer_site/useRemoteParams";
 import { useAgentChannel, useDooverClient, useMultiAgentAggregates } from "doover-js/react";
 
-import { COLOURS, FlowCard, PivotCard, PumpCard, TankCard, type SendState } from "./components/cards";
-import { Dot, Message, Section } from "./components/ui";
+import {
+  COLOURS,
+  FlowRow,
+  PivotRow,
+  PumpRow,
+  TankRow,
+  flowColumns,
+  pivotColumns,
+  pumpColumns,
+  tankColumns,
+  type SendState,
+} from "./components/rows";
+import { Dot, GridSection, Message } from "./components/ui";
 import { fmtClock } from "./lib/format";
 import {
   buttonRpc,
@@ -140,6 +151,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
     subtitle: i.label && i.label !== deviceName(i.device) ? deviceName(i.device) : (fallbackSub ?? installName(i)),
   });
 
+  const showLink = !!cfg.linkHealthAppKey;
   const pumpViews = cfg.pumps.map((p) => pumpView(tagsOf(p), p.target));
   const running = pumpViews.filter((v) => v.running === true).length;
   const tankViews = cfg.tanks.map((t) => tankView(tagsOf(t), uiOf(t), cfg.lowLevelPct, cfg.criticalLevelPct));
@@ -174,7 +186,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
       </div>
 
       {cfg.pumps.length > 0 && (
-        <Section title="Pumps">
+        <GridSection title="Pumps" columns={pumpColumns(showLink)}>
           {cfg.pumps.map((p, idx) => {
             const key = `${p.device}:${p.appKey}:${p.target}`;
             const view = pumpViews[idx];
@@ -184,44 +196,54 @@ function DashboardInner({ uiElement }: WidgetProps) {
             const name = view.name ?? p.target;
             const { title, subtitle } = titles(p, name);
             return (
-              <PumpCard
+              <PumpRow
                 key={key}
                 title={title}
                 subtitle={p.label && p.label !== deviceName(p.device) ? `${deviceName(p.device)} · ${name}` : subtitle}
                 view={view}
                 runTime={rt}
                 {...freshness(p)}
+                showLink={showLink}
                 now={now}
                 sending={sending[key]}
                 onCommand={(verb) => command(key, p.device, p.appKey, p.target, verb)}
               />
             );
           })}
-        </Section>
+        </GridSection>
       )}
 
       {cfg.tanks.length > 0 && (
-        <Section title="Tanks" aside={`Low ≤ ${cfg.lowLevelPct} % · Critical ≤ ${cfg.criticalLevelPct} %`}>
+        <GridSection title="Tanks" aside={`Low ≤ ${cfg.lowLevelPct} % · Critical ≤ ${cfg.criticalLevelPct} %`} columns={tankColumns(showLink)}>
           {cfg.tanks.map((t, idx) => (
-            <TankCard key={`${t.device}:${t.appKey}`} {...titles(t)} view={tankViews[idx]} {...freshness(t)} now={now} />
+            <TankRow
+              key={`${t.device}:${t.appKey}`}
+              {...titles(t)}
+              view={tankViews[idx]}
+              lowPct={cfg.lowLevelPct}
+              criticalPct={cfg.criticalLevelPct}
+              {...freshness(t)}
+              showLink={showLink}
+              now={now}
+            />
           ))}
-        </Section>
+        </GridSection>
       )}
 
       {cfg.flowMeters.length > 0 && (
-        <Section title="Flow">
+        <GridSection title="Flow" columns={flowColumns(showLink)}>
           {cfg.flowMeters.map((f) => (
-            <FlowCard key={`${f.device}:${f.appKey}`} {...titles(f)} view={flowView(tagsOf(f), uiOf(f))} {...freshness(f)} now={now} />
+            <FlowRow key={`${f.device}:${f.appKey}`} {...titles(f)} view={flowView(tagsOf(f), uiOf(f))} {...freshness(f)} showLink={showLink} now={now} />
           ))}
-        </Section>
+        </GridSection>
       )}
 
       {cfg.pivots.length > 0 && (
-        <Section title="Pivots">
+        <GridSection title="Pivots" columns={pivotColumns(showLink)}>
           {cfg.pivots.map((p) => (
-            <PivotCard key={`${p.device}:${p.appKey}`} {...titles(p)} view={pivotView(tagsOf(p))} {...freshness(p)} now={now} />
+            <PivotRow key={`${p.device}:${p.appKey}`} {...titles(p)} view={pivotView(tagsOf(p))} {...freshness(p)} showLink={showLink} now={now} />
           ))}
-        </Section>
+        </GridSection>
       )}
     </div>
   );

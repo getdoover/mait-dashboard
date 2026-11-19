@@ -45,6 +45,7 @@ export function Button({
   variant = "outline",
   disabled,
   title,
+  size = "md",
   className = "",
 }: {
   children: ReactNode;
@@ -52,6 +53,7 @@ export function Button({
   variant?: ButtonVariant;
   disabled?: boolean;
   title?: string;
+  size?: "md" | "sm";
   className?: string;
 }) {
   const styles: Record<ButtonVariant, string> = {
@@ -66,7 +68,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-solid px-3.5 text-[13px] font-medium shadow-xs transition-colors disabled:cursor-default disabled:opacity-50 ${FOCUS} ${styles[variant]} ${className}`}
+      className={`inline-flex ${size === "sm" ? "h-8 px-3" : "h-9 px-3.5"} cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-solid text-[13px] font-medium shadow-xs transition-colors disabled:cursor-default disabled:opacity-50 ${FOCUS} ${styles[variant]} ${className}`}
     >
       {children}
     </button>
@@ -86,28 +88,107 @@ export function Spinner({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+// -- grid sections ----------------------------------------------------------------
+// Each section is one table: a header row, then a row per item. Every row is its
+// own CSS grid on the section's shared column template, so columns line up down
+// the section. Below the template's minimum width the table scrolls sideways
+// with the first (name) column pinned.
+
+export interface Column {
+  label: string;
+  /** A grid track. Its first px value is the column's minimum width. */
+  track: string;
+  align?: "end";
+}
+
+const ROW = "grid items-center gap-x-4 gap-y-1.5 px-4";
+const GAP_X = 16;
+const PAD_X = 32;
+
+const minWidthOf = (columns: Column[]) =>
+  columns.reduce((sum, c) => sum + Number(/(\d+)px/.exec(c.track)?.[1] ?? 0), 0) + GAP_X * (columns.length - 1) + PAD_X;
+
+/** The pinned first cell of a row; `accent` draws a status stripe down its left edge. */
+const FIRST = "sticky left-0 z-[1] -ml-4 self-stretch bg-card pl-4 flex flex-col justify-center min-w-0";
+
+export function GridSection({ title, aside, columns, children }: { title: string; aside?: ReactNode; columns: Column[]; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3" aria-label={title}>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
         {aside && <span className="text-xs text-muted-foreground">{aside}</span>}
       </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))" }}>
-        {children}
-      </div>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <div
+            role="table"
+            aria-label={title}
+            style={{ minWidth: minWidthOf(columns), ["--mait-cols" as string]: columns.map((c) => c.track).join(" ") }}
+          >
+            <div role="row" className={`${ROW} py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground`} style={{ gridTemplateColumns: "var(--mait-cols)" }}>
+              {columns.map((c, i) => (
+                <div key={c.label} role="columnheader" className={`${i === 0 ? FIRST : "truncate"} ${c.align === "end" ? "text-right" : ""}`}>
+                  {c.label}
+                </div>
+              ))}
+            </div>
+            {children}
+          </div>
+        </div>
+      </Card>
     </section>
   );
 }
 
-export function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
+/** One item's row. `note` renders under the row, from the second column across. */
+export function GridRow({ children, note }: { children: ReactNode; note?: ReactNode }) {
   return (
-    <div className="min-w-0">
-      <div className="truncate text-[11px] text-muted-foreground">{label}</div>
-      <div className="truncate text-sm font-semibold tabular-nums">
-        {value}
-        {unit && value !== "—" && <span className="ml-1 text-xs font-normal text-muted-foreground">{unit}</span>}
-      </div>
+    <div
+      role="row"
+      className={`${ROW} border-solid border-border py-2.5`}
+      // Explicit widths: without preflight a bare border-t leaves the other sides at "medium".
+      style={{ gridTemplateColumns: "var(--mait-cols)", borderWidth: "1px 0 0 0" }}
+    >
+      {children}
+      {note && (
+        <div className="flex flex-col gap-1" style={{ gridColumn: "2 / -1" }}>
+          {note}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The row's name cell: title over subtitle, pinned while the table scrolls. */
+export function NameCell({ title, subtitle, accent }: { title: string; subtitle?: string; accent?: string }) {
+  return (
+    <div role="cell" className={FIRST} style={accent ? { boxShadow: `inset 3px 0 0 ${accent}` } : undefined}>
+      <div className="truncate text-sm font-semibold leading-tight" title={title}>
+        {title}
+      </div>
+      {subtitle && (
+        <div className="mt-0.5 truncate text-xs text-muted-foreground" title={subtitle}>
+          {subtitle}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Cell({ children, align, className = "", title }: { children: ReactNode; align?: "end"; className?: string; title?: string }) {
+  return (
+    <div role="cell" title={title} className={`min-w-0 ${align === "end" ? "flex justify-end text-right" : ""} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/** A number with its unit, right-aligned in its column. */
+export function Num({ value, unit }: { value: string; unit?: string }) {
+  return (
+    <span className="truncate text-sm font-medium tabular-nums">
+      {value}
+      {unit && value !== "—" && <span className="ml-1 text-xs font-normal text-muted-foreground">{unit}</span>}
+    </span>
   );
 }

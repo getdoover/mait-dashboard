@@ -6,19 +6,21 @@ Install it on any device (a site's Doovit, or a dashboard device of its own). It
 
 ## What it shows
 
-- **Pumps**: the state each pump reports (Running, Stopped, Fault, Unknown), how long it has been running or when it stopped, its run hours and starts today, and Start / Stop. While Pump Control is waiting for the pump to confirm a command, the pump shows *Starting…* or *Stopping…*. If the pump doesn't confirm in time, Pump Control's warning appears on the card.
-- **Tanks**: a tank graphic filled to the reported level, coloured blue when the level is fine, amber when low and red when critical. The card also shows the level in the sensor's own units, and the volume when the sensor app shows one. A sensor fault is shown as a fault, never as an empty tank.
-- **Flow**: the flow rate in the meter's display units, on a bar scaled to the meter's own gauge range. The bar animates while water is flowing. The card also shows today's, yesterday's and the total volume.
+Each kind of item is its own section: a table with one row per item and the same columns down the section, so values can be compared at a glance. On a narrow screen a section scrolls sideways with the names pinned.
+
+- **Pumps**: the state each pump reports (Running, Stopped, Fault, Unknown), how long it has been running or when it stopped, its run hours and starts today, and Start / Stop. While Pump Control is waiting for the pump to confirm a command, the pump shows *Starting…* or *Stopping…*. If the pump doesn't confirm in time, Pump Control's warning appears under the pump's row.
+- **Tanks**: the level as a percentage and a bar marked at the low and critical levels, coloured blue when the level is fine, amber when low and red when critical. The row also shows the level in the sensor's own units, and the volume when the sensor app shows one. A sensor fault is shown as a fault, never as an empty tank.
+- **Flow**: the flow rate in the meter's display units, on a bar scaled to the meter's own gauge range. The bar animates while water is flowing. The row also shows today's, yesterday's and the total volume.
 - **Pivots**: running state and direction, arm angle on a dial, speed and safety.
-- **Radio link**: a dot on every card from the device's Link Health install: green when online, amber when degraded, red when offline. Hover over it to see the route, link success and when the device was last heard. A card whose device hasn't been heard from for longer than *Stale After* says so, with its last values still shown.
+- **Radio link**: a *Last heard* column on every section, from the device's Link Health install: green when online, amber when degraded, red when offline. Hover over it to see the route and link success. A row whose device hasn't been heard from for longer than *Stale After* says *Stale*, with its last values still shown.
 
 Nothing is hidden because its value is zero, missing or old. An item with no data yet shows "No reading yet".
 
 ## Start and Stop
 
-The dashboard presses the pump's own Pump Control button. Start or Stop posts the same `ui_cmds` RPC message on the pump's device that the button on that device's page sends (method `p_<target>_start` / `p_<target>_stop` for the install's app key). Pump Control then publishes the command on its command channel, tracks it as pending, and times it out exactly as it does for a press on the pump's own page. Every press asks for confirmation on the card first. For a timed pump, Start runs for the time in the pump page's *Start For (min)* input, which is the pump's default run time unless an operator has changed it there.
+The dashboard presses the pump's own Pump Control button. Start or Stop posts the same `ui_cmds` RPC message on the pump's device that the button on that device's page sends (method `p_<target>_start` / `p_<target>_stop` for the install's app key). Pump Control then publishes the command on its command channel, tracks it as pending, and times it out exactly as it does for a press on the pump's own page. Every press asks for confirmation in the row first. For a timed pump, Start runs for the time in the pump page's *Start For (min)* input, which is the pump's default run time unless an operator has changed it there.
 
-The card always shows the state the pump reports, never the state that was asked for.
+The row always shows the state the pump reports, never the state that was asked for.
 
 ## Configuration
 
@@ -31,7 +33,7 @@ The card always shows the state the pump reports, never the state that was asked
 | **Pivots** | Ordered list: the device, the Pivot Control app key (default `pivot_control_1`) and an optional label. |
 | **Link Health App Key** | The Link Health install on each device (default `link_health_1`). Leave empty to hide link status. |
 | **Low Level (%)** / **Critical Level (%)** | Tank colour bands (default 30 % and 10 %). |
-| **Stale After (min)** | How long since a device was last heard before its card is marked stale (default 30). |
+| **Stale After (min)** | How long since a device was last heard before its row is marked stale (default 30). |
 | **Devices** | Grant every device listed above here (`dv_proc_extended_permissions`). |
 
 Labels default to the device name, with the install's own name underneath.
