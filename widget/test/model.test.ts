@@ -11,6 +11,7 @@ import {
   pumpView,
   rpcMarker,
   runTime,
+  runTimeValue,
   slug,
   tankView,
 } from "../src/lib/model.ts";
@@ -59,6 +60,12 @@ test("run time: operator's last entry, else the input's default; none when latch
   assert.deepEqual(runTime(el, undefined, "pump_start"), { minutes: 60, max: 720 });
   assert.deepEqual(runTime(el, { p_pump_start_minutes: 15 }, "pump_start"), { minutes: 15, max: 720 });
   assert.equal(runTime(undefined, { p_pump_start_minutes: 15 }, "pump_start"), undefined);
+});
+
+test("a chosen run time lands where the pump page's input keeps it, and runTime reads it back", () => {
+  const value = runTimeValue("pump_control_2", "Pump 1", 45);
+  assert.deepEqual(value, { pump_control_2: { p_Pump_1_minutes: 45 } });
+  assert.deepEqual(runTime({ default: 30, max: 120 }, value.pump_control_2 as Record<string, unknown>, "Pump 1"), { minutes: 45, max: 120 });
 });
 
 test("Start/Stop post exactly the pump page's button RPC", () => {

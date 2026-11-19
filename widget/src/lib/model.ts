@@ -200,6 +200,11 @@ export function runTime(minutesElement: unknown, uiCmdsApp: Dict | undefined, ta
   return { minutes, max: num(minutesElement.max) ?? undefined };
 }
 
+/** A run time for the pump page's "Start For (min)" input, as kept in the device's ui_cmds aggregate. */
+export const runTimeValue = (appKey: string, target: string, minutes: number): Dict => ({
+  [appKey]: { [`p_${slug(target)}_minutes`]: minutes },
+});
+
 /** The ui_cmds RPC the pump page's Start / Stop button posts (customer-site uiCommandRpcData). */
 export function buttonRpc(
   appKey: string,

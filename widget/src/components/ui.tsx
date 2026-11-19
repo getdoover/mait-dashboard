@@ -1,4 +1,6 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Link, useInRouterContext } from "react-router";
 
 // Controls styled after the host site's shadcn components (its CSS variables
 // carry the theme), written locally so the bundle stays React-only.
@@ -159,13 +161,36 @@ export function GridRow({ children, note }: { children: ReactNode; note?: ReactN
   );
 }
 
-/** The row's name cell: title over subtitle, pinned while the table scrolls. */
-export function NameCell({ title, subtitle, accent }: { title: string; subtitle?: string; accent?: string }) {
+/** A link to another page of the host site: a router link inside the site, a plain link otherwise. */
+export function SiteLink({ to, className, title, children }: { to: string; className?: string; title?: string; children: ReactNode }) {
+  return useInRouterContext() ? (
+    <Link to={to} className={className} title={title}>
+      {children}
+    </Link>
+  ) : (
+    <a href={to} className={className} title={title}>
+      {children}
+    </a>
+  );
+}
+
+/** The row's name cell: title over subtitle, pinned while the table scrolls. `to` links the title to the item's device page. */
+export function NameCell({ title, subtitle, accent, to }: { title: string; subtitle?: string; accent?: string; to?: string }) {
   return (
     <div role="cell" className={FIRST} style={accent ? { boxShadow: `inset 3px 0 0 ${accent}` } : undefined}>
-      <div className="truncate text-sm font-semibold leading-tight" title={title}>
-        {title}
-      </div>
+      {to ? (
+        <SiteLink
+          to={to}
+          title={`Open ${title}'s device page`}
+          className={`block truncate text-sm font-semibold leading-tight text-foreground no-underline decoration-1 underline-offset-2 hover:underline ${FOCUS} rounded-sm`}
+        >
+          {title}
+        </SiteLink>
+      ) : (
+        <div className="truncate text-sm font-semibold leading-tight" title={title}>
+          {title}
+        </div>
+      )}
       {subtitle && (
         <div className="mt-0.5 truncate text-xs text-muted-foreground" title={subtitle}>
           {subtitle}
@@ -180,6 +205,40 @@ export function Cell({ children, align, className = "", title }: { children: Rea
     <div role="cell" title={title} className={`min-w-0 ${align === "end" ? "flex justify-end text-right" : ""} ${className}`}>
       {children}
     </div>
+  );
+}
+
+/** A modal dialog over the whole page. Escape or a click outside closes it. */
+export function Dialog({ title, description, onClose, children }: { title: string; description?: ReactNode; onClose: () => void; children: ReactNode }) {
+  const titleId = useId();
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (!panel.current?.contains(e.target as Node)) onClose();
+      }}
+    >
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-sm rounded-xl border border-solid border-border bg-card p-5 text-card-foreground shadow-lg"
+      >
+        <h2 id={titleId} className="m-0 text-base font-semibold">
+          {title}
+        </h2>
+        {description && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

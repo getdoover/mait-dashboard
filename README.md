@@ -14,11 +14,13 @@ Each kind of item is its own section: a table with one row per item and the same
 - **Pivots**: running state and direction, arm angle on a dial, speed and safety.
 - **Radio link**: a *Last heard* column on every section, from the device's Link Health install: green when online, amber when degraded, red when offline. Hover over it to see the route and link success. A row whose device hasn't been heard from for longer than *Stale After* says *Stale*, with its last values still shown.
 
+Click an item's name to open the page of the device it is on.
+
 Nothing is hidden because its value is zero, missing or old. An item with no data yet shows "No reading yet".
 
 ## Start and Stop
 
-The dashboard presses the pump's own Pump Control button. Start or Stop posts the same `ui_cmds` RPC message on the pump's device that the button on that device's page sends (method `p_<target>_start` / `p_<target>_stop` for the install's app key). Pump Control then publishes the command on its command channel, tracks it as pending, and times it out exactly as it does for a press on the pump's own page. Every press asks for confirmation in the row first. For a timed pump, Start runs for the time in the pump page's *Start For (min)* input, which is the pump's default run time unless an operator has changed it there.
+The dashboard presses the pump's own Pump Control button. Start or Stop posts the same `ui_cmds` RPC message on the pump's device that the button on that device's page sends (method `p_<target>_start` / `p_<target>_stop` for the install's app key). Pump Control then publishes the command on its command channel, tracks it as pending, and times it out exactly as it does for a press on the pump's own page. For a timed pump, Start opens a popup asking how many minutes to run, filled in with the time in the pump page's *Start For (min)* input and limited to the pump's maximum run time. The chosen time is saved to that input, exactly where the pump page keeps it, before the Start is sent, so Pump Control runs the pump for that long and the pump page shows the same time. A latched pump's Start, and every Stop, asks for confirmation in the row.
 
 The row always shows the state the pump reports, never the state that was asked for.
 
@@ -48,4 +50,4 @@ Labels default to the device name, with the install's own name underneath.
 | Pivot Control | `state`, `status`, `direction`, `angle_deg`, `heading`, `speed_percent`, `safety_ok`, `pending_command` |
 | Link Health | `status`, `status_label`, `status_colour`, `last_heard_ts`, `route`, `link_success_pct` |
 
-Units, precision and gauge ranges come from each app's own page (`ui_state`), so the dashboard shows the same units as the device page. Writes go only to a pump device's `ui_cmds`, and only when someone confirms Start or Stop.
+Units, precision and gauge ranges come from each app's own page (`ui_state`), so the dashboard shows the same units as the device page. Writes go only to a pump device's `ui_cmds`, and only when someone confirms Start or Stop (Start on a timed pump also writes its `p_<target>_minutes` run time).

@@ -32,6 +32,7 @@ import {
   readPath,
   rpcMarker,
   runTime,
+  runTimeValue,
   slug,
   tankView,
   uiAppPath,
@@ -68,6 +69,9 @@ function useNow(intervalMs = 5_000) {
 }
 
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
+
+/** The host site's page for a device. */
+const devicePage = (deviceId: string) => `/agent/${deviceId}`;
 
 function DashboardInner({ uiElement }: WidgetProps) {
   const params = useRemoteParams();
@@ -114,7 +118,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
 
   const [sending, setSending] = useState<Record<string, SendState>>({});
   const command = useCallback(
-    async (key: string, device: string, pumpAppKey: string, target: string, verb: "start" | "stop") => {
+    async (key: string, device: string, pumpAppKey: string, target: string, verb: "start" | "stop", minutes?: number) => {
       setSending((s) => ({ ...s, [key]: { verb, at: Date.now() } }));
       // Exactly what the pump page's own button does (customer-site
       // sendUiCommandRpc): an RPC message on the device's ui_cmds, then its
@@ -122,6 +126,12 @@ function DashboardInner({ uiElement }: WidgetProps) {
       // handles it, publishes the command and tracks it as pending.
       const data = buttonRpc(pumpAppKey, target, verb, Date.now(), actor);
       try {
+        // The chosen run time goes where the pump page's "Start For (min)" input
+        // keeps its value. Pump Control reads it from the ui_cmds aggregate when
+        // it handles the Start, so it is written (and awaited) first.
+        if (verb === "start" && minutes != null) {
+          await client.aggregates.patchAggregate(device, "ui_cmds", runTimeValue(pumpAppKey, target, minutes) as never);
+        }
         const message = await client.messages.postMessage(device, "ui_cmds", { data: data as never });
         await client.aggregates.patchAggregate(device, "ui_cmds", rpcMarker(pumpAppKey, String(data.method), message.id) as never);
       } catch (e) {
@@ -198,6 +208,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
             return (
               <PumpRow
                 key={key}
+                to={devicePage(p.device)}
                 title={title}
                 subtitle={p.label && p.label !== deviceName(p.device) ? `${deviceName(p.device)} · ${name}` : subtitle}
                 view={view}
@@ -206,7 +217,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
                 showLink={showLink}
                 now={now}
                 sending={sending[key]}
-                onCommand={(verb) => command(key, p.device, p.appKey, p.target, verb)}
+                onCommand={(verb, minutes) => command(key, p.device, p.appKey, p.target, verb, minutes)}
               />
             );
           })}
@@ -218,6 +229,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
           {cfg.tanks.map((t, idx) => (
             <TankRow
               key={`${t.device}:${t.appKey}`}
+              to={devicePage(t.device)}
               {...titles(t)}
               view={tankViews[idx]}
               lowPct={cfg.lowLevelPct}
@@ -233,7 +245,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
       {cfg.flowMeters.length > 0 && (
         <GridSection title="Flow" columns={flowColumns(showLink)}>
           {cfg.flowMeters.map((f) => (
-            <FlowRow key={`${f.device}:${f.appKey}`} {...titles(f)} view={flowView(tagsOf(f), uiOf(f))} {...freshness(f)} showLink={showLink} now={now} />
+            <FlowRow key={`${f.device}:${f.appKey}`} to={devicePage(f.device)} {...titles(f)} view={flowView(tagsOf(f), uiOf(f))} {...freshness(f)} showLink={showLink} now={now} />
           ))}
         </GridSection>
       )}
@@ -241,7 +253,7 @@ function DashboardInner({ uiElement }: WidgetProps) {
       {cfg.pivots.length > 0 && (
         <GridSection title="Pivots" columns={pivotColumns(showLink)}>
           {cfg.pivots.map((p) => (
-            <PivotRow key={`${p.device}:${p.appKey}`} {...titles(p)} view={pivotView(tagsOf(p))} {...freshness(p)} showLink={showLink} now={now} />
+            <PivotRow key={`${p.device}:${p.appKey}`} to={devicePage(p.device)} {...titles(p)} view={pivotView(tagsOf(p))} {...freshness(p)} showLink={showLink} now={now} />
           ))}
         </GridSection>
       )}

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { fmtAgo, fmtClock, fmtDuration, fmtNum } from "../lib/format";
 import type { Band, FlowView, LinkView, PivotView, PumpStatus, PumpView, RunTime, TankView } from "../lib/model";
-import { Button, Cell, Dot, GridRow, NameCell, Num, Pill, Spinner, type Column } from "./ui";
+import { Button, Cell, Dialog, Dot, GridRow, NameCell, Num, Pill, Spinner, type Column } from "./ui";
 
 export const COLOURS = {
   run: "#16a34a",
@@ -157,18 +157,22 @@ export function PumpRow({
   now,
   sending,
   onCommand,
+  to,
   ...fresh
 }: Freshness & {
   title: string;
   subtitle?: string;
+  to?: string;
   view: PumpView;
   runTime?: RunTime;
   showLink: boolean;
   now: number;
   sending: SendState;
-  onCommand: (verb: "start" | "stop") => void;
+  /** Start carries the run time chosen in the popup for a timed pump. */
+  onCommand: (verb: "start" | "stop", minutes?: number) => void;
 }) {
   const [confirm, setConfirm] = useState<"start" | "stop" | null>(null);
+  const [askMinutes, setAskMinutes] = useState(false);
   // A confirm left open goes away on its own rather than lingering for the next person.
   useEffect(() => {
     if (!confirm) return;
@@ -198,6 +202,8 @@ export function PumpRow({
 
   const busy = !!awaitingTags;
   const minutes = runTime ? ` · ${fmtNum(runTime.minutes, 0)} min` : "";
+  // A timed pump asks how long to run in a popup (that is its confirmation); a latched pump confirms in the row.
+  const onStart = () => (runTime ? setAskMinutes(true) : setConfirm("start"));
 
   const notes = [
     view.warning && (
@@ -214,7 +220,7 @@ export function PumpRow({
 
   return (
     <GridRow note={notes.length ? notes : undefined}>
-      <NameCell title={title} subtitle={subtitle} accent={pillColour} />
+      <NameCell title={title} subtitle={subtitle} accent={pillColour} to={to} />
       <Cell title={view.commandText}>
         <div className="flex items-center gap-2.5">
           <Impeller colour={pillColour} spinning={view.status === "running" || (view.status === "pending" && view.running === true)} />
@@ -258,8 +264,8 @@ export function PumpRow({
         ) : (
           <span className="flex gap-2">
             {view.showStart && (
-              <Button size="sm" disabled={busy} onClick={() => setConfirm("start")}>
-                <Dot colour={COLOURS.run} /> Start{minutes}
+              <Button size="sm" disabled={busy} onClick={onStart}>
+                <Dot colour={COLOURS.run} /> Start
               </Button>
             )}
             {view.showStop && (
@@ -269,8 +275,76 @@ export function PumpRow({
             )}
           </span>
         )}
+        {askMinutes && runTime && (
+          <RunTimeDialog
+            pump={title}
+            runTime={runTime}
+            onCancel={() => setAskMinutes(false)}
+            onStart={(m) => {
+              setAskMinutes(false);
+              onCommand("start", m);
+            }}
+          />
+        )}
       </Cell>
     </GridRow>
+  );
+}
+
+/** Asks how many minutes a timed pump should run for, starting from its current run time. */
+function RunTimeDialog({ pump, runTime, onCancel, onStart }: { pump: string; runTime: RunTime; onCancel: () => void; onStart: (minutes: number) => void }) {
+  const [text, setText] = useState(String(runTime.minutes));
+  const value = Number(text);
+  const max = runTime.max;
+  const error =
+    text.trim() === "" || !Number.isFinite(value)
+      ? "Enter a number of minutes."
+      : value < 1
+        ? "Run for at least 1 minute."
+        : max != null && value > max
+          ? `This pump runs for at most ${fmtNum(max, 0)} minutes.`
+          : undefined;
+  const submit = () => {
+    if (!error) onStart(value);
+  };
+  return (
+    <Dialog title={`Start ${pump}`} description="How long should the pump run?" onClose={onCancel}>
+      <form
+        className="flex flex-col gap-3 text-left"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Run time (minutes){max != null ? ` · 1 – ${fmtNum(max, 0)}` : ""}</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={1}
+            max={max}
+            step="any"
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            aria-invalid={!!error}
+            className="h-10 w-full rounded-md border border-solid border-input bg-background px-3 text-base tabular-nums text-foreground shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </label>
+        <div className={`min-h-4 text-xs ${error ? "" : "text-muted-foreground"}`} style={{ color: error ? COLOURS.halt : undefined }}>
+          {error ?? (Number.isFinite(value) ? `Runs until about ${fmtClock(Date.now() + value * 60_000, Date.now())}.` : "")}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="go" disabled={!!error} onClick={submit}>
+            Start{error ? "" : ` · ${fmtNum(value, value % 1 ? 1 : 0)} min`}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -292,13 +366,14 @@ export function TankRow({
   criticalPct,
   showLink,
   now,
+  to,
   ...fresh
-}: Freshness & { title: string; subtitle?: string; view: TankView; lowPct: number; criticalPct: number; showLink: boolean; now: number }) {
+}: Freshness & { title: string; subtitle?: string; to?: string; view: TankView; lowPct: number; criticalPct: number; showLink: boolean; now: number }) {
   const look = BAND_LOOK[view.band];
   const alert = view.band === "low" || view.band === "critical" ? look.colour : undefined;
   return (
     <GridRow note={view.faultText ? <Note>{view.faultText}</Note> : undefined}>
-      <NameCell title={title} subtitle={subtitle} accent={alert} />
+      <NameCell title={title} subtitle={subtitle} accent={alert} to={to} />
       <Cell>
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-right text-lg font-semibold leading-none tabular-nums" style={{ color: view.pct == null ? "var(--muted-foreground)" : undefined }}>
@@ -332,14 +407,14 @@ export function TankRow({
 
 // -- flow -----------------------------------------------------------------------
 
-export function FlowRow({ title, subtitle, view, showLink, now, ...fresh }: Freshness & { title: string; subtitle?: string; view: FlowView; showLink: boolean; now: number }) {
+export function FlowRow({ title, subtitle, view, showLink, now, to, ...fresh }: Freshness & { title: string; subtitle?: string; to?: string; view: FlowView; showLink: boolean; now: number }) {
   const flowing = view.flowing === true || (view.rate != null && view.rate > 0);
   const colour = view.faultText ? COLOURS.none : flowing ? COLOURS.flow : COLOURS.idle;
   const frac = view.rate != null && view.rateMax ? view.rate / view.rateMax : flowing ? 1 : 0;
   const status = view.faultText ? "Sensor fault" : view.rate == null && view.flowing == null ? "No reading yet" : flowing ? "Flowing" : "No flow";
   return (
     <GridRow note={view.faultText ? <Note>{view.faultText}</Note> : undefined}>
-      <NameCell title={title} subtitle={subtitle} />
+      <NameCell title={title} subtitle={subtitle} to={to} />
       <Cell>
         <div className="flex items-center gap-3">
           <span className="w-24 shrink-0 truncate text-right text-lg font-semibold leading-none tabular-nums" style={{ color: view.rate == null ? "var(--muted-foreground)" : undefined }}>
@@ -399,12 +474,12 @@ function PivotDial({ angle, colour, running }: { angle: number | null; colour: s
   );
 }
 
-export function PivotRow({ title, subtitle, view, showLink, now, ...fresh }: Freshness & { title: string; subtitle?: string; view: PivotView; showLink: boolean; now: number }) {
+export function PivotRow({ title, subtitle, view, showLink, now, to, ...fresh }: Freshness & { title: string; subtitle?: string; to?: string; view: PivotView; showLink: boolean; now: number }) {
   const running = view.state === "running";
   const colour = view.safetyOk === false ? COLOURS.halt : running ? COLOURS.run : view.state === "stopped" ? COLOURS.idle : COLOURS.none;
   return (
     <GridRow>
-      <NameCell title={title} subtitle={subtitle} accent={view.safetyOk === false ? COLOURS.halt : undefined} />
+      <NameCell title={title} subtitle={subtitle} accent={view.safetyOk === false ? COLOURS.halt : undefined} to={to} />
       <Cell>
         <div className="flex items-center gap-2.5">
           <PivotDial angle={view.angle} colour={colour} running={running} />
