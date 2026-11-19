@@ -1,0 +1,30 @@
+{
+    "mait_dashboard": {
+        "name": "mait_dashboard",
+        "display_name": "MAIT Dashboard",
+        "type": "PRO",
+        "visibility": "PUB",
+        "allow_many": true,
+        "description": "Whole-site dashboard for a MAIT iNTELLiNet water network: pump start and stop, tank levels, flow rates and pivots on one page.",
+        "long_description": "README.md",
+        "depends_on": [],
+        "organisation_id": "93957122026437134",
+        "widget": "widget/assets/MaitDashboardWidget.js",
+        "build_widget_command": "npm --prefix widget ci && npm --prefix widget run build",
+        "export_config_command": "export-config",
+        "export_ui_command": "export-ui",
+        "lambda_config": {
+            "Environment": {},
+            "Runtime": "python3.13",
+            "Timeout": 60,
+            "Handler": "src.mait_dashboard.handler",
+            "MemorySize": 128,
+            "Architectures": [
+                "arm64"
+            ]
+        },
+        "repository_url": "https://github.com/getdoover/mait-dashboard",
+        "data_access": "read_write",
+        "has_ui": true
+    }
+}
