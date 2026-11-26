@@ -4,6 +4,8 @@ One page for a whole MAIT iNTELLiNet water site: every pump with Start and Stop,
 
 Install it on any device (a site's Doovit, or a dashboard device of its own). It never needs to run on the devices it shows.
 
+There is nothing to list by hand. The dashboard looks at every device in its own group (or the devices chosen under **Devices** in its settings) and shows whatever runs there: every pump of each Pump Control in the Pump role, and every Analog Level Sensor Processor, Flow Meter Processor and Pivot Control. Each device's apps are read live from what is deployed on it, so a new device, or a new app on one, appears once it is deployed. Within each section, rows are in alphabetical order.
+
 ## What it shows
 
 Each kind of item is its own section: a table with one row per item and the same columns down the section, so values can be compared at a glance. On a narrow screen a section scrolls sideways with the names pinned.
@@ -12,9 +14,9 @@ Each kind of item is its own section: a table with one row per item and the same
 - **Tanks**: the level as a percentage and a bar marked at the low and critical levels, coloured blue when the level is fine, amber when low and red when critical. The row also shows the level in the sensor's own units, and the volume when the sensor app shows one. A sensor fault is shown as a fault, never as an empty tank.
 - **Flow**: the flow rate in the meter's display units, on a bar scaled to the meter's own gauge range. The bar animates while water is flowing. The row also shows today's, yesterday's and the total volume.
 - **Pivots**: running state and direction, arm angle on a dial, speed and safety.
-- **Radio link**: a *Last heard* column on every section, from the device's Link Health install: green when online, amber when degraded, red when offline. Hover over it to see the route and link success. A row whose device hasn't been heard from for longer than *Stale After* says *Stale*, with its last values still shown.
+- **Radio link**: a *Last heard* column on every section, from the device's Link Health install (the first, by app key, if it has several): green when online, amber when degraded, red when offline. Hover over it to see the route and link success. A row whose device hasn't been heard from for longer than *Stale After* says *Stale*, with its last values still shown.
 
-Click an item's name to open the page of the device it is on.
+Each row is named after its device. When a device has more than one item in a section, such as two pumps on one Pump Control, the item's own name is added: *Fert Pump East · Pump 1*. Click a name to open the device's page.
 
 Nothing is hidden because its value is zero, missing or old. An item with no data yet shows "No reading yet".
 
@@ -29,16 +31,9 @@ The row always shows the state the pump reports, never the state that was asked 
 | Setting | What it does |
 |---|---|
 | **Title** | Heading at the top of the dashboard. |
-| **Tanks** | Ordered list: the device, the Analog Level Sensor Processor app key on it (default `analog_level_sensor_processor_1`) and an optional label. |
-| **Pumps** | Ordered list: the device, the Pump Control app key (default `pump_control_1`), the pump's **Target** in that install (e.g. `pump_start`, `pump_1`) and an optional label. List each pump of a multi-pump install separately. |
-| **Flow Meters** | Ordered list: the device, the Flow Meter Processor app key (default `flow_meter_processor_1`) and an optional label. |
-| **Pivots** | Ordered list: the device, the Pivot Control app key (default `pivot_control_1`) and an optional label. |
-| **Link Health App Key** | The Link Health install on each device (default `link_health_1`). Leave empty to hide link status. |
 | **Low Level (%)** / **Critical Level (%)** | Tank colour bands (default 30 % and 10 %). |
 | **Stale After (min)** | How long since a device was last heard before its row is marked stale (default 30). |
-| **Devices** | Grant every device listed above here (`dv_proc_extended_permissions`). |
-
-Labels default to the device name, with the install's own name underneath.
+| **Devices** | Which devices the dashboard looks at. Set to the dashboard device's own group when it is installed; groups include their sub-groups. |
 
 ## Tags and channels read
 
@@ -50,4 +45,4 @@ Labels default to the device name, with the install's own name underneath.
 | Pivot Control | `state`, `status`, `direction`, `angle_deg`, `heading`, `speed_percent`, `safety_ok`, `pending_command` |
 | Link Health | `status`, `status_label`, `status_colour`, `last_heard_ts`, `route`, `link_success_pct` |
 
-Units, precision and gauge ranges come from each app's own page (`ui_state`), so the dashboard shows the same units as the device page. Writes go only to a pump device's `ui_cmds`, and only when someone confirms Start or Stop (Start on a timed pump also writes its `p_<target>_minutes` run time).
+Each device's `deployment_config` says which of these apps it runs (and, for Pump Control, its role and pumps). That channel keeps the settings of an app that has been removed, so an install is shown only while control lists it on the device: from the dashboard's device map, or, for a device whose apps have changed since the map was built, from control's install list for that device. Units, precision and gauge ranges come from each app's own page (`ui_state`), so the dashboard shows the same units as the device page. Writes go only to a pump device's `ui_cmds`, and only when someone confirms Start or Stop (Start on a timed pump also writes its `p_<target>_minutes` run time).

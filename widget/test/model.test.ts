@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   buttonRpc,
+  deployedInstallIds,
+  discoverSite,
   flowView,
   levelBand,
   linkView,
@@ -16,20 +18,86 @@ import {
   tankView,
 } from "../src/lib/model.ts";
 
-test("config lists keep order, fill default app keys and drop incomplete items", () => {
-  const c = parseConfig({
-    tanks: [{ device: "2", label: "B" }, { device: "1", app_key: "analog_level_sensor_processor_2" }, { label: "no device" }],
-    pumps: [{ device: "5", target: "pump_start" }, { device: "6" }],
-    stale_after_min: 5,
-  });
-  assert.deepEqual(c.tanks.map((t) => [t.device, t.appKey, t.label]), [
-    ["2", "analog_level_sensor_processor_1", "B"],
-    ["1", "analog_level_sensor_processor_2", undefined],
-  ]);
-  assert.deepEqual(c.pumps, [{ device: "5", appKey: "pump_control_1", target: "pump_start", label: undefined }]);
-  assert.equal(c.linkHealthAppKey, "link_health_1");
+test("config keeps only the display settings", () => {
+  const c = parseConfig({ title: "Barmount", stale_after_min: 5 });
+  assert.equal(c.title, "Barmount");
   assert.equal(c.staleAfterMs, 300_000);
-  assert.equal(parseConfig({ link_health_app_key: "" }).linkHealthAppKey, null);
+  assert.equal(parseConfig(undefined).lowLevelPct, 30);
+});
+
+const app = (name: string, display: string, extra: Record<string, unknown> = {}) => ({ APPLICATION_NAME: name, APP_DISPLAY_NAME: display, ...extra });
+
+test("discovery finds every shown app on each device, named after the device", () => {
+  const site = discoverSite(
+    [
+      { id: "1", name: "Fert Pump East" },
+      { id: "2", name: "Turkeys Nest" },
+      { id: "3", name: "Eastern Diesel Pump" },
+      { id: "4", name: "Dashboard" },
+    ],
+    {
+      "1": {
+        applications: {
+          pump_control_1: app("pump_control", "Fert Pumps", {
+            role: "Pump",
+            pumps: [{ target: "pump_2", name: "Pump 2" }, { target: "pump_1", name: "Pump 1" }, { name: "no target" }],
+          }),
+          flow_meter_processor_1: app("flow_meter_processor", "Flow"),
+          link_health_1: app("link_health", "Link Health"),
+        },
+      },
+      "2": {
+        applications: {
+          pump_control_1: app("pump_control", "Auto-Fill", { role: "Auto-fill (storage)", pumps: [] }),
+          flow_meter_processor_2: app("flow_meter_processor", "Flow Meter 2"),
+          flow_meter_processor_1: app("flow_meter_processor", "Inflow"),
+          analog_level_sensor_processor_1: app("analog_level_sensor_processor", "Turkeys Nest Level"),
+          link_health_2: app("link_health", "Second Link"),
+          link_health_1: app("link_health", "Link Health"),
+        },
+      },
+      "3": { applications: { pump_control_1: app("pump_control", "Diesel Pump", { role: "Pump", pumps: [{ target: "pump_start", name: "Diesel Pump" }] }) } },
+      "4": { applications: { mait_dashboard_1: app("mait_dashboard", "Site Dashboard") } },
+    },
+  );
+  assert.deepEqual(
+    site.pumps.map((p) => [p.title, p.device, p.appKey, p.target]),
+    [
+      ["Eastern Diesel Pump", "3", "pump_control_1", "pump_start"],
+      ["Fert Pump East · Pump 1", "1", "pump_control_1", "pump_1"],
+      ["Fert Pump East · Pump 2", "1", "pump_control_1", "pump_2"],
+    ],
+  );
+  assert.deepEqual(site.tanks.map((t) => t.title), ["Turkeys Nest"]);
+  assert.deepEqual(
+    site.flowMeters.map((f) => [f.title, f.appKey]),
+    [
+      ["Fert Pump East", "flow_meter_processor_1"],
+      ["Turkeys Nest · Flow Meter 2", "flow_meter_processor_2"],
+      ["Turkeys Nest · Inflow", "flow_meter_processor_1"],
+    ],
+  );
+  assert.deepEqual(site.pivots, []);
+  assert.deepEqual(site.linkKey, { "1": "link_health_1", "2": "link_health_1" });
+});
+
+test("discovery tolerates devices whose deployment_config has not loaded", () => {
+  const site = discoverSite([{ id: "1", name: "A" }], {});
+  assert.deepEqual([site.pumps, site.tanks, site.flowMeters, site.pivots, site.linkKey], [[], [], [], [], {}]);
+});
+
+test("a removed install's leftover block is not shown, and is what makes a device worth checking", () => {
+  const dc = {
+    applications: {
+      analog_level_sensor_processor_1: app("analog_level_sensor_processor", "Channel Level", { APP_INSTALL_ID: "10" }),
+      pump_control_1: app("pump_control", "Diesel Pumps", { APP_INSTALL_ID: "11", role: "Pump", pumps: [{ target: "eastern_pump", name: "Eastern Pump" }] }),
+      mait_bridge_1: app("mait_bridge", "Bridge", { APP_INSTALL_ID: "12" }),
+    },
+  };
+  assert.deepEqual(deployedInstallIds(dc).sort(), ["10", "11"]);
+  const site = discoverSite([{ id: "1", name: "Pump Channel", installs: new Set(["10"]) }], { "1": dc });
+  assert.deepEqual(site.pumps, []);
+  assert.deepEqual(site.tanks.map((t) => t.title), ["Pump Channel"]);
 });
 
 test("slug matches Pump Control", () => {

@@ -5,10 +5,12 @@
 export type Json = unknown;
 export type Dict = Record<string, unknown>;
 
+/** One dashboard row: an install (and, for a pump, one of its pumps) on a device. */
 export interface ItemConfig {
   device: string;
   appKey: string;
-  label?: string;
+  /** The row's name: the device's name, plus the item's own name when the device has more than one in a section. */
+  title: string;
 }
 export interface PumpItemConfig extends ItemConfig {
   target: string;
@@ -16,11 +18,6 @@ export interface PumpItemConfig extends ItemConfig {
 
 export interface DashboardConfig {
   title: string;
-  tanks: ItemConfig[];
-  pumps: PumpItemConfig[];
-  flowMeters: ItemConfig[];
-  pivots: ItemConfig[];
-  linkHealthAppKey: string | null;
   lowLevelPct: number;
   criticalLevelPct: number;
   staleAfterMs: number;
@@ -38,39 +35,115 @@ export const num = (v: unknown): number | null => {
 };
 const numOr = (v: unknown, d: number) => num(v) ?? d;
 
-function items(raw: unknown, defaultKey: string): ItemConfig[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((r) => {
-    if (!isDict(r)) return [];
-    const device = str(r.device);
-    if (!device) return [];
-    return [{ device, appKey: str(r.app_key) ?? defaultKey, label: str(r.label) }];
-  });
-}
-
 /** This install's config, from its block of the agent's deployment_config. */
 export function parseConfig(app: Dict | undefined): DashboardConfig {
   const a = app ?? {};
-  const pumps: PumpItemConfig[] = Array.isArray(a.pumps)
-    ? a.pumps.flatMap((r) => {
-        if (!isDict(r)) return [];
-        const device = str(r.device);
-        const target = str(r.target);
-        if (!device || !target) return [];
-        return [{ device, appKey: str(r.app_key) ?? "pump_control_1", target, label: str(r.label) }];
-      })
-    : [];
-  const lh = a.link_health_app_key;
   return {
     title: str(a.title) ?? "Site Overview",
-    tanks: items(a.tanks, "analog_level_sensor_processor_1"),
-    pumps,
-    flowMeters: items(a.flow_meters, "flow_meter_processor_1"),
-    pivots: items(a.pivots, "pivot_control_1"),
-    linkHealthAppKey: lh === undefined ? "link_health_1" : (str(lh) ?? null),
     lowLevelPct: numOr(a.low_level_pct, 30),
     criticalLevelPct: numOr(a.critical_level_pct, 10),
     staleAfterMs: numOr(a.stale_after_min, 30) * 60_000,
+  };
+}
+
+// -- discovery -------------------------------------------------------------------
+
+export interface SiteDevice {
+  id: string;
+  name: string;
+  /** The device's current install ids, when known. An install not in it is not shown. */
+  installs?: ReadonlySet<string>;
+}
+
+/** The apps the dashboard reads, by application name. */
+export const SHOWN_APPS = new Set(["pump_control", "analog_level_sensor_processor", "flow_meter_processor", "pivot_control", "link_health"]);
+
+/** Install ids of the shown apps in a device's deployment_config, which keeps a removed install's block. */
+export function deployedInstallIds(deploymentConfig: unknown): string[] {
+  const apps = isDict(deploymentConfig) && isDict(deploymentConfig.applications) ? deploymentConfig.applications : {};
+  return Object.values(apps).flatMap((a) =>
+    isDict(a) && SHOWN_APPS.has(String(a.APPLICATION_NAME)) && str(a.APP_INSTALL_ID) ? [str(a.APP_INSTALL_ID) as string] : [],
+  );
+}
+
+export interface Site {
+  pumps: PumpItemConfig[];
+  tanks: ItemConfig[];
+  flowMeters: ItemConfig[];
+  pivots: ItemConfig[];
+  /** The Link Health install each device's radio link status comes from. */
+  linkKey: Record<string, string>;
+}
+
+const byTitle = (a: ItemConfig, b: ItemConfig) =>
+  a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" }) || a.appKey.localeCompare(b.appKey);
+
+/** Rows named after their device; a device with several in one section adds each one's own name. */
+function titled<T extends ItemConfig>(rows: Array<Omit<T, "title"> & { deviceName: string; itemName: string }>): T[] {
+  const perDevice = new Map<string, number>();
+  for (const r of rows) perDevice.set(r.device, (perDevice.get(r.device) ?? 0) + 1);
+  return rows
+    .map(({ deviceName, itemName, ...r }) => ({ ...r, title: (perDevice.get(r.device) ?? 0) > 1 ? `${deviceName} · ${itemName}` : deviceName }) as unknown as T)
+    .sort(byTitle);
+}
+
+/**
+ * Everything the dashboard shows, found from what is installed on each device
+ * it can see: every pump of each Pump Control in the Pump role, and every
+ * Analog Level Sensor Processor, Flow Meter Processor and Pivot Control.
+ * Each install's settings come from its device's deployment_config. That
+ * keeps the block of a removed install, so only installs in the device's
+ * `installs` set are shown.
+ */
+export function discoverSite(devices: SiteDevice[], deploymentConfigs: Record<string, unknown>): Site {
+  type Row = { device: string; appKey: string; deviceName: string; itemName: string };
+  const pumps: Array<Row & { target: string }> = [];
+  const tanks: Row[] = [];
+  const flows: Row[] = [];
+  const pivots: Row[] = [];
+  const linkKey: Record<string, string> = {};
+
+  for (const d of devices) {
+    const dc = deploymentConfigs[d.id];
+    const apps = isDict(dc) && isDict(dc.applications) ? dc.applications : {};
+    for (const appKey of Object.keys(apps).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))) {
+      const app = apps[appKey];
+      if (!isDict(app)) continue;
+      const installId = str(app.APP_INSTALL_ID);
+      if (d.installs && (!installId || !d.installs.has(installId))) continue;
+      const base = { device: d.id, appKey, deviceName: d.name, itemName: str(app.APP_DISPLAY_NAME) ?? appKey };
+      switch (app.APPLICATION_NAME) {
+        case "pump_control": {
+          // The Auto-fill (storage) role calls a pump on another device; only the Pump role has pumps of its own.
+          if (app.role != null && app.role !== "Pump") break;
+          for (const p of Array.isArray(app.pumps) ? app.pumps : []) {
+            const target = isDict(p) ? str(p.target) : undefined;
+            if (target) pumps.push({ ...base, target, itemName: str(p.name) ?? target });
+          }
+          break;
+        }
+        case "analog_level_sensor_processor":
+          tanks.push(base);
+          break;
+        case "flow_meter_processor":
+          flows.push(base);
+          break;
+        case "pivot_control":
+          pivots.push(base);
+          break;
+        case "link_health":
+          linkKey[d.id] ??= appKey;
+          break;
+      }
+    }
+  }
+
+  return {
+    pumps: titled<PumpItemConfig>(pumps),
+    tanks: titled<ItemConfig>(tanks),
+    flowMeters: titled<ItemConfig>(flows),
+    pivots: titled<ItemConfig>(pivots),
+    linkKey,
   };
 }
 
